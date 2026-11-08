@@ -1,0 +1,37 @@
+{
+ "name": "verath-business-manager",
+ "version": "0.1.0",
+ "private": true,
+ "scripts": {
+  "dev": "next dev",
+  "build": "prisma generate && next build",
+  "start": "next start",
+  "db:migrate": "prisma migrate dev",
+  "db:deploy": "prisma migrate deploy",
+  "test": "tsx --test tests/pure.test.ts",
+  "smoke": "node scripts/smoke.mjs",
+  "postinstall": "prisma generate",
+  "deep": "node scripts/deep.mjs"
+ },
+ "dependencies": {
+  "@prisma/adapter-pg": "6.19.3",
+  "@prisma/client": "6.19.3",
+  "bcryptjs": "2.4.3",
+  "jose": "5.9.3",
+  "lucide-react": "^1.69.0",
+  "next": "16.4.5",
+  "pg": "8.16.3",
+  "react": "19.2.0",
+  "react-dom": "19.2.0",
+  "zod": "4.6.7"
+ },
+ "devDependencies": {
+  "@types/bcryptjs": "2.4.6",
+  "@types/node": "20.16.10",
+  "@types/pg": "8.15.5",
+  "@types/react": "19.2.2",
+  "prisma": "6.19.3",
+  "tsx": "^4.19.1",
+  "typescript": "5.6.2"
+ }
+}
