@@ -1,159 +1,197 @@
--- Verath Business Manager: database setup for Supabase.
--- Paste this whole file into Supabase > SQL Editor > New query, then click Run. Run it ONCE on a new, empty project.
--- It creates all tables, then turns on row level security so Supabase's public API cannot read your data
--- (the app connects directly with the database owner role, so it is not affected).
+generator client {
+  provider = "prisma-client-js"
+  engineType = "client"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+enum Role {
+  OWNER
+  ADMIN
+  MANAGER
+  EMPLOYEE
+  VIEWER
+}
+enum Plan {
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+model User {
+  id String @id @default(cuid())
+  email String @unique
+  name String
+  passwordHash String
+  createdAt DateTime @default(now())
+  memberships Membership[]
+}
+model Organization {
+  id String @id @default(cuid())
+  name String
+  slug String @unique
+  plan Plan @default(STARTER)
+  createdAt DateTime @default(now())
+  memberships Membership[]
+  audit AuditLog[]
+  leads Lead[]
+  transactions Transaction[]
+  projects Project[]
+  tasks Task[]
+  employees AiEmployee[]
+  workflows Workflow[]
+}
+model Membership {
+  id String @id @default(cuid())
+  userId String
+  orgId String
+  role Role @default(EMPLOYEE)
+  user User @relation(fields:[userId], references:[id], onDelete: Cascade)
+  org Organization @relation(fields:[orgId], references:[id], onDelete: Cascade)
+  @@unique([userId, orgId])
+}
+model AuditLog {
+  id String @id @default(cuid())
+  orgId String
+  actorId String?
+  action String
+  meta Json?
+  createdAt DateTime @default(now())
+  org Organization @relation(fields:[orgId], references:[id], onDelete: Cascade)
+  @@index([orgId, createdAt])
+}
 
-CREATE TYPE "Role" AS ENUM ('OWNER', 'ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER');
-CREATE TYPE "Plan" AS ENUM ('STARTER', 'PROFESSIONAL', 'ENTERPRISE');
-CREATE TABLE "User" (
-  "id" TEXT PRIMARY KEY,
-  "email" TEXT NOT NULL UNIQUE,
-  "name" TEXT NOT NULL,
-  "passwordHash" TEXT NOT NULL,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE "Organization" (
-  "id" TEXT PRIMARY KEY,
-  "name" TEXT NOT NULL,
-  "slug" TEXT NOT NULL UNIQUE,
-  "plan" "Plan" NOT NULL DEFAULT 'STARTER',
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE "Membership" (
-  "id" TEXT PRIMARY KEY,
-  "userId" TEXT NOT NULL,
-  "orgId" TEXT NOT NULL,
-  "role" "Role" NOT NULL DEFAULT 'EMPLOYEE'
-);
-CREATE UNIQUE INDEX ON "Membership" ("userId", "orgId");
-CREATE TABLE "AuditLog" (
-  "id" TEXT PRIMARY KEY,
-  "orgId" TEXT NOT NULL,
-  "actorId" TEXT,
-  "action" TEXT NOT NULL,
-  "meta" JSONB,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX ON "AuditLog" ("orgId", "createdAt");
-CREATE TABLE "Lead" (
-  "id" TEXT PRIMARY KEY,
-  "orgId" TEXT NOT NULL,
-  "name" TEXT NOT NULL,
-  "email" TEXT,
-  "phone" TEXT,
-  "source" TEXT,
-  "status" TEXT NOT NULL DEFAULT 'NEW',
-  "value" DOUBLE PRECISION NOT NULL DEFAULT 0,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX ON "Lead" ("orgId", "status");
-CREATE TABLE "Transaction" (
-  "id" TEXT PRIMARY KEY,
-  "orgId" TEXT NOT NULL,
-  "type" TEXT NOT NULL,
-  "category" TEXT NOT NULL,
-  "amount" DOUBLE PRECISION NOT NULL,
-  "note" TEXT,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX ON "Transaction" ("orgId", "createdAt");
-CREATE TABLE "Project" (
-  "id" TEXT PRIMARY KEY,
-  "orgId" TEXT NOT NULL,
-  "name" TEXT NOT NULL,
-  "description" TEXT,
-  "status" TEXT NOT NULL DEFAULT 'ACTIVE',
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE "Task" (
-  "id" TEXT PRIMARY KEY,
-  "orgId" TEXT NOT NULL,
-  "projectId" TEXT,
-  "title" TEXT NOT NULL,
-  "status" TEXT NOT NULL DEFAULT 'TODO',
-  "priority" TEXT NOT NULL DEFAULT 'MEDIUM',
-  "due" TEXT,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX ON "Task" ("orgId", "status");
-CREATE TABLE "AiEmployee" (
-  "id" TEXT PRIMARY KEY,
-  "orgId" TEXT NOT NULL,
-  "catalogKey" TEXT,
-  "name" TEXT NOT NULL,
-  "title" TEXT NOT NULL,
-  "instructions" TEXT NOT NULL,
-  "tools" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
-  "status" TEXT NOT NULL DEFAULT 'ACTIVE',
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX ON "AiEmployee" ("orgId");
-CREATE TABLE "AgentMessage" (
-  "id" TEXT PRIMARY KEY,
-  "orgId" TEXT NOT NULL,
-  "employeeId" TEXT NOT NULL,
-  "role" TEXT NOT NULL,
-  "content" TEXT NOT NULL,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX ON "AgentMessage" ("employeeId", "createdAt");
-CREATE TABLE "Workflow" (
-  "id" TEXT PRIMARY KEY,
-  "orgId" TEXT NOT NULL,
-  "name" TEXT NOT NULL,
-  "trigger" TEXT NOT NULL,
-  "active" BOOLEAN NOT NULL DEFAULT false,
-  "nodes" JSONB NOT NULL DEFAULT '[]'::jsonb,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX ON "Workflow" ("orgId", "trigger");
-CREATE TABLE "WorkflowRun" (
-  "id" TEXT PRIMARY KEY,
-  "orgId" TEXT NOT NULL,
-  "workflowId" TEXT NOT NULL,
-  "status" TEXT NOT NULL DEFAULT 'RUNNING',
-  "data" JSONB NOT NULL DEFAULT '{}'::jsonb,
-  "log" JSONB NOT NULL DEFAULT '[]'::jsonb,
-  "cursor" INTEGER NOT NULL DEFAULT 0,
-  "error" TEXT,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX ON "WorkflowRun" ("orgId", "createdAt");
-CREATE TABLE "BrainMessage" (
-  "id" TEXT PRIMARY KEY,
-  "orgId" TEXT NOT NULL,
-  "userId" TEXT NOT NULL,
-  "role" TEXT NOT NULL,
-  "content" TEXT NOT NULL,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX ON "BrainMessage" ("orgId", "userId", "createdAt");
-CREATE TABLE "KbDoc" (
-  "id" TEXT PRIMARY KEY,
-  "orgId" TEXT NOT NULL,
-  "title" TEXT NOT NULL,
-  "content" TEXT NOT NULL,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX ON "KbDoc" ("orgId");
-CREATE TABLE "Notification" (
-  "id" TEXT PRIMARY KEY,
-  "orgId" TEXT NOT NULL,
-  "type" TEXT NOT NULL,
-  "message" TEXT NOT NULL,
-  "read" BOOLEAN NOT NULL DEFAULT false,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX ON "Notification" ("orgId", "read", "createdAt");
-CREATE TABLE "UsageEvent" (
-  "id" TEXT PRIMARY KEY,
-  "orgId" TEXT NOT NULL,
-  "kind" TEXT NOT NULL,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX ON "UsageEvent" ("orgId", "kind", "createdAt");
+model Lead {
+  id String @id @default(cuid())
+  orgId String
+  name String
+  email String?
+  phone String?
+  source String?
+  status String @default("NEW")
+  value Float @default(0)
+  createdAt DateTime @default(now())
+  org Organization @relation(fields:[orgId], references:[id], onDelete: Cascade)
+  @@index([orgId, status])
+}
+model Transaction {
+  id String @id @default(cuid())
+  orgId String
+  type String
+  category String
+  amount Float
+  note String?
+  createdAt DateTime @default(now())
+  org Organization @relation(fields:[orgId], references:[id], onDelete: Cascade)
+  @@index([orgId, createdAt])
+}
+model Project {
+  id String @id @default(cuid())
+  orgId String
+  name String
+  description String?
+  status String @default("ACTIVE")
+  createdAt DateTime @default(now())
+  org Organization @relation(fields:[orgId], references:[id], onDelete: Cascade)
+  tasks Task[]
+}
+model Task {
+  id String @id @default(cuid())
+  orgId String
+  projectId String?
+  title String
+  status String @default("TODO")
+  priority String @default("MEDIUM")
+  due String?
+  createdAt DateTime @default(now())
+  org Organization @relation(fields:[orgId], references:[id], onDelete: Cascade)
+  project Project? @relation(fields:[projectId], references:[id], onDelete: SetNull)
+  @@index([orgId, status])
+}
 
-do $$ declare t record; begin
-  for t in select tablename from pg_tables where schemaname='public' loop
-    execute format('alter table public.%I enable row level security', t.tablename);
-  end loop; end $$;
+model AiEmployee {
+  id String @id @default(cuid())
+  orgId String
+  catalogKey String?
+  name String
+  title String
+  instructions String
+  tools String[]
+  status String @default("ACTIVE")
+  createdAt DateTime @default(now())
+  org Organization @relation(fields:[orgId], references:[id], onDelete: Cascade)
+  messages AgentMessage[]
+  @@index([orgId])
+}
+model AgentMessage {
+  id String @id @default(cuid())
+  orgId String
+  employeeId String
+  role String
+  content String
+  createdAt DateTime @default(now())
+  employee AiEmployee @relation(fields:[employeeId], references:[id], onDelete: Cascade)
+  @@index([employeeId, createdAt])
+}
+
+model Workflow {
+  id String @id @default(cuid())
+  orgId String
+  name String
+  trigger String
+  active Boolean @default(false)
+  nodes Json @default("[]")
+  createdAt DateTime @default(now())
+  org Organization @relation(fields:[orgId], references:[id], onDelete: Cascade)
+  runs WorkflowRun[]
+  @@index([orgId, trigger])
+}
+model WorkflowRun {
+  id String @id @default(cuid())
+  orgId String
+  workflowId String
+  status String @default("RUNNING")
+  data Json @default("{}")
+  log Json @default("[]")
+  cursor Int @default(0)
+  error String?
+  createdAt DateTime @default(now())
+  workflow Workflow @relation(fields:[workflowId], references:[id], onDelete: Cascade)
+  @@index([orgId, createdAt])
+}
+
+model BrainMessage {
+  id String @id @default(cuid())
+  orgId String
+  userId String
+  role String
+  content String
+  createdAt DateTime @default(now())
+  @@index([orgId, userId, createdAt])
+}
+
+model KbDoc {
+  id String @id @default(cuid())
+  orgId String
+  title String
+  content String
+  createdAt DateTime @default(now())
+  @@index([orgId])
+}
+model Notification {
+  id String @id @default(cuid())
+  orgId String
+  type String
+  message String
+  read Boolean @default(false)
+  createdAt DateTime @default(now())
+  @@index([orgId, read, createdAt])
+}
+model UsageEvent {
+  id String @id @default(cuid())
+  orgId String
+  kind String
+  createdAt DateTime @default(now())
+  @@index([orgId, kind, createdAt])
+}
