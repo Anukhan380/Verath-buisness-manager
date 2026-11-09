@@ -1,0 +1,1 @@
+export default function Loading() { return <div><div className="skel" style={{ height: 60, width: "50%" }} /><div className="g4"><div className="skel" /><div className="skel" /><div className="skel" /><div className="skel" /></div><div className="skel" style={{ height: 240 }} /></div>; }

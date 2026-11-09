@@ -1,0 +1,44 @@
+// Run with the app started (npm run dev):  npm run smoke   (BASE_URL optional)
+const BASE = process.env.BASE_URL ?? "http://localhost:3000";
+let fails = 0; const ok = (n, c, x = "") => { console.log(`${c ? "PASS" : "FAIL"}  ${n} ${c ? "" : x}`); if (!c) fails++; };
+function client() { let cookie = ""; return async (path, o = {}) => {
+  const r = await fetch(BASE + path, { method: o.method ?? "GET", headers: { "Content-Type": "application/json", cookie }, body: o.body ? JSON.stringify(o.body) : undefined, redirect: "manual" });
+  const sc = r.headers.getSetCookie?.() ?? []; if (sc.length) cookie = sc.map(c => c.split(";")[0]).join("; ");
+  let j = null; try { j = await r.json(); } catch {} return { status: r.status, j }; }; }
+const id = Math.random().toString(36).slice(2, 8), A = client(), B = client(), anon = client();
+const reg = (n) => ({ method: "POST", body: { name: "User " + n, email: `${n}-${id}@test.dev`, password: "correct-horse-1", orgName: "Org " + n } });
+ok("unauthenticated API call is rejected", (await anon("/api/leads")).status === 401);
+ok("register org A", (await A("/api/auth/register", reg("a"))).status === 200);
+ok("register org B", (await B("/api/auth/register", reg("b"))).status === 200);
+ok("weak password rejected", (await anon("/api/auth/register", { method: "POST", body: { name: "x", email: "w@t.dev", password: "short", orgName: "xx" } })).status === 400);
+const lead = (await A("/api/leads", { method: "POST", body: { name: "Smoke Lead", value: 250 } })).j;
+ok("A creates a lead", !!lead?.id);
+ok("invalid lead rejected", (await A("/api/leads", { method: "POST", body: { value: -1 } })).status === 400);
+ok("B cannot see A's leads", ((await B("/api/leads")).j ?? []).length === 0);
+ok("B cannot edit A's lead", (await B(`/api/leads/${lead.id}`, { method: "PATCH", body: { name: "hacked" } })).status === 404);
+ok("B cannot delete A's lead", (await B(`/api/leads/${lead.id}`, { method: "DELETE" })).status === 404);
+ok("unknown resource 404", (await A("/api/nope")).status === 404);
+ok("lead creation produced a notification", ((await A("/api/notifications")).j ?? []).some(n => n.type === "new_lead"));
+const mk = async (name, nodes) => (await A("/api/workflows", { method: "POST", body: { name, trigger: "MANUAL", nodes } })).j;
+const run = async (w) => { await A(`/api/workflows/${w.id}`, { method: "POST", body: { action: "run", data: { lead: { name: "X" } } } }); return ((await A("/api/workflows")).j.runs).find(r => r.workflowId === w.id); };
+const tasks = async () => ((await A("/api/tasks")).j ?? []).map(t => t.title);
+const w1 = await mk("simple", [{ type: "CREATE_TASK", title: "Smoke task for {{lead.name}}" }]); const r1 = await run(w1);
+ok("workflow runs and succeeds", r1?.status === "SUCCESS", r1?.status); ok("workflow created the task", (await tasks()).includes("Smoke task for X"));
+const w2 = await mk("bad", [{ type: "AI_EMPLOYEE", employeeId: "does-not-exist", prompt: "hi" }]); const r2 = await run(w2);
+ok("failing workflow is FAILED, never SUCCESS", r2?.status === "FAILED" && !!r2.error, r2?.status);
+const w3 = await mk("approval", [{ type: "APPROVAL" }, { type: "CREATE_TASK", title: "After approval" }]); const r3 = await run(w3);
+ok("approval pauses the run", r3?.status === "WAITING_APPROVAL" && !(await tasks()).includes("After approval"));
+ok("B cannot approve A's run", (await B(`/api/workflows/${w3.id}`, { method: "POST", body: { action: "approve", runId: r3.id } })).status === 404);
+await A(`/api/workflows/${w3.id}`, { method: "POST", body: { action: "approve", runId: r3.id } });
+ok("approval resumes and finishes", (await tasks()).includes("After approval"));
+ok("B sees none of A's workflows", ((await B("/api/workflows")).j?.workflows ?? []).length === 0);
+const wf = (await A("/api/workforce")).j; ok("marketplace lists 8 employees", wf?.catalog?.length === 8);
+const emp = (await A("/api/workforce", { method: "POST", body: { catalogKey: "sales" } })).j; ok("hire AI employee", !!emp?.id);
+const chat = await A(`/api/workforce/${emp.id}/chat`, { method: "POST", body: { message: "How many leads do I have? Use your tools." } });
+if (wf.aiConfigured) ok("AI employee replies (OPENAI_API_KEY set)", chat.status === 200 && typeof chat.j?.reply === "string", JSON.stringify(chat.j));
+else ok("AI reports honestly that it is not configured", chat.status === 503);
+const br = await A("/api/brain", { method: "POST", body: { message: "Give me an overview of my business" } });
+ok(wf.aiConfigured ? "Brain replies" : "Brain reports not configured", wf.aiConfigured ? br.status === 200 : br.status === 503, JSON.stringify(br.j));
+ok("CSV export works", (await A("/api/export/leads")).status === 200);
+ok("usage endpoint reports plan", (await A("/api/usage")).j?.plan === "STARTER");
+console.log(fails ? `\n${fails} check(s) FAILED` : "\nAll checks passed"); process.exit(fails ? 1 : 0);

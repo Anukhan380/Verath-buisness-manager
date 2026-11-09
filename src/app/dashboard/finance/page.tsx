@@ -1,0 +1,1 @@
+import Manager from "@/components/Manager"; export default function P(){return <><h2>Finance</h2><Manager res="transactions" titleKey="category" fields={[{k:"type",label:"Type",opts:["INCOME","EXPENSE"]},{k:"category",label:"Category"},{k:"amount",label:"Amount",type:"number"},{k:"note",label:"Note"}]}/></>}
