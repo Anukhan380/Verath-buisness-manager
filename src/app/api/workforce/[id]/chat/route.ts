@@ -16,7 +16,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const emp = await db.aiEmployee.findFirst({ where: { id: params.id, orgId: c.orgId } });
     if (!emp) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (emp.status !== "ACTIVE") return NextResponse.json({ error: "This AI employee is paused" }, { status: 409 });
-    try { return NextResponse.json(await runAgent(c.orgId, c.userId, emp, p.data.message, true)); } catch (e) { const m = (e as Error).message; if (m.startsWith("Monthly AI limit")) return NextResponse.json({ error: m }, { status: 429 }); console.error(e); return NextResponse.json({ error: "AI request failed" }, { status: 502 }); }
+    try {
+      return NextResponse.json(await runAgent(c.orgId, c.userId, emp, p.data.message, true));
+    } catch (e) {
+      const m = (e as Error).message;
+      if (m.startsWith("Monthly AI limit")) return NextResponse.json({ error: m }, { status: 429 });
+      if (m.startsWith("AI provider error")) return NextResponse.json({ error: m }, { status: 502 });
+      console.error(e);
+      return NextResponse.json({ error: "AI request failed" }, { status: 502 });
+    }
   });
 }
 
