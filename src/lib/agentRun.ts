@@ -5,7 +5,7 @@ type Msg = { role: string; content: string | null; tool_calls?: { id: string; fu
 const RULES = "Rules: never invent business figures; use tools for data; say clearly what is missing; never claim an action happened unless a tool result confirms it; you cannot send emails or messages or access banks.";
 async function llm(messages: Msg[], tools: object[]) {
   const r = await fetch(`${process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1"}/chat/completions`, { method: "POST", headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: process.env.OPENAI_MODEL ?? "gpt-4o-mini", messages, ...(tools.length ? { tools } : {}) }) });
-  if (!r.ok) throw new Error(`AI provider error ${r.status}`);
+  if (!r.ok) throw new Error(`AI provider error ${r.status}: ${(await r.text().catch(() => "")).slice(0, 300)}`);
   return (await r.json()).choices[0].message as Msg;
 }
 export async function runAgent(orgId: string, actorId: string, emp: { id: string; name: string; title: string; instructions: string; tools: string[] }, message: string, save: boolean, extra?: { defs: Record<string, object>; run: (n: string, a: Record<string, string>) => Promise<unknown>; history?: { role: string; content: string }[] }) {
