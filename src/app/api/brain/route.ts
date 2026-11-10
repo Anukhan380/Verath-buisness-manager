@@ -17,8 +17,13 @@ export async function POST(req: Request) {
       const r = await runAgent(c.orgId, c.userId, brainEmp(), p.data.message, false, brainExtra(c.orgId, c.userId, past));
       await db.brainMessage.createMany({ data: [{ orgId: c.orgId, userId: c.userId, role: "user", content: p.data.message }, { orgId: c.orgId, userId: c.userId, role: "assistant", content: r.reply }] });
       return NextResponse.json(r);
-    } catch (e) { const m = (e as Error).message; if (m.startsWith("Monthly AI limit")) return NextResponse.json({ error: m }, { status: 429 }); console.error(e); return NextResponse.json({ error: "AI request failed" }, { status: 502 }); }
-     if (m.startsWith("AI provider error")) return NextResponse.json({ error: m }, { status: 502 });
+    } catch (e) {
+      const m = (e as Error).message;
+      if (m.startsWith("Monthly AI limit")) return NextResponse.json({ error: m }, { status: 429 });
+      if (m.startsWith("AI provider error")) return NextResponse.json({ error: m }, { status: 502 });
+      console.error(e);
+      return NextResponse.json({ error: "AI request failed" }, { status: 502 });
+    }
   });
 }
 
